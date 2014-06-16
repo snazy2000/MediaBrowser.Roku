@@ -11,7 +11,7 @@ Function createChannelScreen(viewController as Object, item As Object) As Object
     loader.parsePagedResult = parseChannelScreenResult
     loader.channel = item
     
-    screen = createPaginatedGridScreen(viewController, names, keys, loader, "two-row-flat-landscape-custom", 20)
+    screen = createPaginatedGridScreen(viewController, names, keys, loader, "two-row-flat-landscape-custom", 8, 20)
 
     screen.displayDescription = 0
 
@@ -19,7 +19,7 @@ Function createChannelScreen(viewController as Object, item As Object) As Object
 
 End Function
 
-Function parseChannelScreenResult(row as Integer, json as String) as Object
+Function parseChannelScreenResult(row as Integer, id as string, json as String) as Object
 
     return parseItemsResponse(json, 0, "mixed-aspect-ratio-portrait", "autosize")
 

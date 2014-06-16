@@ -4,7 +4,43 @@
 
 Function createHomeScreen(viewController as Object) as Object
 
-    screen = CreateGridScreen(viewController, "two-row-flat-landscape-custom")
+	names = []
+	keys = []
+	
+	If RegRead("prefCollectionsFirstRow") = "yes"
+        names.push("Media Folders")
+		keys.push("folders")
+    End If
+    
+    names.push("Movies")
+	keys.push("movies")
+	
+	names.push("TV")
+	keys.push("tv")
+	
+	names.push("Live TV")
+	keys.push("livetv")
+	
+	names.push("Music")
+	keys.push("music")
+	
+	names.push("Channels")
+	keys.push("channels")
+	
+	If RegRead("prefCollectionsFirstRow") <> "yes"
+        names.push("Media Folders")
+		keys.push("folders")
+    End If
+	
+	names.push("Options")
+	keys.push("options")
+
+	loader = CreateObject("roAssociativeArray")
+	loader.getUrl = getHomeScreenRowUrl
+	loader.parsePagedResult = parseHomeScreenResult
+	loader.getLocalData = getHomeScreenLocalData
+
+    screen = createPaginatedGridScreen(viewController, names, keys, loader, "two-row-flat-landscape-custom")
 
 	screen.baseHandleMessage = screen.HandleMessage
 	screen.HandleMessage = handleHomeScreenMessage
@@ -25,92 +61,208 @@ Function createHomeScreen(viewController as Object) as Object
 	
 	sendWolToAllServers(m)
 
-    mediaItemCounts = getMediaItemCounts()
-
-    if mediaItemCounts = invalid
-		createErrorDialog("Exit")
-        return invalid
-    end if
-
-    showLiveTv = isLiveTvEnabled()
-
-    m.movieToggle  = (firstOf(RegUserRead("movieToggle"), "2")).ToInt()
-    m.tvToggle     = (firstOf(RegUserRead("tvToggle"), "1")).ToInt()
-    m.musicToggle  = (firstOf(RegUserRead("musicToggle"), "1")).ToInt()
-    m.liveTvToggle = (firstOf(RegUserRead("liveTvToggle"), "1")).ToInt()
-
-    If RegRead("prefCollectionsFirstRow") = "yes"
-        screen.AddRow("Media Folders", "landscape")
-    End If
-    
-    If mediaItemCounts.MovieCount > 0 Then
-        screen.AddRow("Movies", "landscape")
-    End If
-
-    If mediaItemCounts.SeriesCount > 0 Then
-        screen.AddRow("TV", "landscape")
-    End If
-
-    If showLiveTv Then
-        screen.AddRow("Live TV", "landscape")
-    End If
-
-    If mediaItemCounts.SongCount > 0 Then
-        screen.AddRow("Music", "landscape")
-    End If
-
-    screen.AddRow("Channels", "landscape")
-
-    If RegRead("prefCollectionsFirstRow") = "no" Or RegRead("prefCollectionsFirstRow") = invalid
-        screen.AddRow("Media Folders", "landscape")
-    End If
-
-    screen.AddRow("Options", "landscape")
-
-    screen.ShowNames()
-
-    If RegRead("prefCollectionsFirstRow") = "yes"
-        mediaFolderButtons = GetMediaFolderButtons()
-        screen.AddRowContent(mediaFolderButtons)
-    End If
-
-    If mediaItemCounts.MovieCount > 0 Then
-        moviesButtons = GetMovieButtons(viewController)
-        screen.AddRowContent(moviesButtons)
-    End If
-
-    If mediaItemCounts.SeriesCount > 0 Then
-        tvButtons = GetTVButtons(viewController)
-        screen.AddRowContent(tvButtons)
-    End If
-
-    If showLiveTv Then
-        liveTvButtons = GetLiveTVButtons(viewController)
-        screen.AddRowContent(liveTvButtons)
-    End If
-
-    If mediaItemCounts.SongCount > 0 Then
-        musicButtons = GetMusicButtons(viewController)
-        screen.AddRowContent(musicButtons)
-    End If
-
-    ' Need to validate
-    channelButtons = GetChannelButtons(viewController)
-    screen.AddRowContent(channelButtons)
-
-    If firstOf(RegRead("prefCollectionsFirstRow"), "no")  = "no"
-	
-        mediaFolderButtons = GetMediaFolderButtons()
-        screen.AddRowContent(mediaFolderButtons)
-		
-    End If
-
-    optionButtons = GetOptionButtons(viewController)
-    screen.AddRowContent(optionButtons)
-
     screen.SetDescriptionVisible(false)
 
 	return screen
+End Function
+
+Function getHomeScreenLocalData(row as Integer, id as String, startItem as Integer, count as Integer) as Object
+
+	viewController = GetViewController()
+	
+	if id = "options" then
+		return GetOptionButtons(viewController)
+	else if id = "movies" 
+		return GetMovieButtons(viewController)
+	else if id = "tv" 
+	
+		tvToggle  = (firstOf(RegUserRead("tvToggle"), "1")).ToInt()
+		
+		' Jump list
+		if tvToggle = 3 then
+		
+			return GetTVButtons(viewController, tvToggle)
+		end if
+		
+	else if id = "music" 
+	
+		musicToggle  = (firstOf(RegUserRead("musicToggle"), "1")).ToInt()
+
+		if musicToggle <> 1 then
+		
+			' 1 is Latest and will be background loaded from the server
+			return GetMusicButtons(viewController, musicToggle)
+		end if
+		
+	else if id = "livetv" 
+		return GetLiveTVButtons(viewController)
+	end If
+	
+	return invalid
+
+End Function
+
+Function getHomeScreenRowUrl(row as Integer, id as String) as String
+
+    url = GetServerBaseUrl()
+
+    query = {}
+
+	if id = "folders"
+	
+		url = url  + "/Users/" + HttpEncode(getGlobalVar("user").Id) + "/Items?sortby=sortname"
+		query.AddReplace("Fields", "PrimaryImageAspectRatio")
+
+	else if id = "channels"
+	
+		url = url  + "/Channels?userid=" + HttpEncode(getGlobalVar("user").Id)
+
+	else if id = "tv"
+	
+		tvToggle  = (firstOf(RegUserRead("tvToggle"), "1")).ToInt()
+
+		' Next Up
+		if tvToggle = 1 then
+			
+			url = url + "/Shows/NextUp?userId=" + HttpEncode(getGlobalVar("user").Id)
+			
+			query = {
+				fields: "PrimaryImageAspectRatio,Overview"
+			}
+			
+		' Latest
+		else if tvToggle = 2 then
+			
+			url = url + "/Users/" + HttpEncode(getGlobalVar("user").Id) + "/Items?IncludeItemTypes=Episode"
+			query = {
+				recursive: "true"
+				ExcludeLocationTypes: "Virtual"
+				fields: "PrimaryImageAspectRatio"
+				sortby: "DateCreated"
+				sortorder: "Descending"
+				filters: "IsUnplayed"
+			}
+			
+		' Resume
+		else if tvToggle = 4 then
+			
+			url = url + "/Users/" + HttpEncode(getGlobalVar("user").Id) + "/Items?includeitemtypes=Episode"
+			query = {
+				recursive: "true"
+				fields: "PrimaryImageAspectRatio"
+				sortby: "DatePlayed"
+				sortorder: "Descending"
+				filters: "IsResumable"
+			}
+			
+		' Favorites
+		else if tvToggle = 5 then
+			
+			url = url + "/Users/" + HttpEncode(getGlobalVar("user").Id) + "/Items?includeitemtypes=Series"
+			query = {
+				recursive: "true"
+				fields: "PrimaryImageAspectRatio"
+				sortby: "SortName"
+				sortorder: "Ascending"
+				filters: "IsFavorite"
+			}
+			
+		' Genres
+		else if tvToggle = 6 then
+			
+			url = url + "/Genres?Recursive=true"
+			query = {
+				userid: getGlobalVar("user").Id
+				includeitemtypes: "Series"
+				fields: "PrimaryImageAspectRatio"
+				sortby: "SortName"
+				sortorder: "Ascending"
+			}
+			
+		end if		
+		
+	else if id = "music"
+	
+		musicToggle  = (firstOf(RegUserRead("musicToggle"), "1")).ToInt()
+
+		' Latest
+		if musicToggle = 1 then
+			
+			url = url + "/Users/" + HttpEncode(getGlobalVar("user").Id) + "/Items?includeitemtypes=MusicAlbum"		
+			query = {
+				recursive: "true"
+				fields: "PrimaryImageAspectRatio"
+				sortby: "DateCreated"
+				sortorder: "Descending"
+			}
+			
+		end if		
+		
+	end If
+
+	for each key in query
+		url = url + "&" + key +"=" + HttpEncode(query[key])
+	end for
+
+    return url
+
+End Function
+
+Function parseHomeScreenResult(row as Integer, id as string, startIndex as Integer, json as String) as Object
+
+	viewController = GetViewController()
+	maxListSize = 30
+	
+	if id = "folders" then
+		return parseItemsResponse(json, 0, "two-row-flat-landscape-custom")
+	else if id = "channels" then
+		return parseItemsResponse(json, 1, "two-row-flat-landscape-custom")
+		
+	else if id = "tv" then
+	
+		tvToggle  = (firstOf(RegUserRead("tvToggle"), "1")).ToInt()		
+		
+		if tvToggle = 5 then
+			response = parseItemsResponse(json, 1, "two-row-flat-landscape-custom")
+		else if tvToggle = 6 then
+			response = parseItemsResponse(json, 1, "mixed-aspect-ratio-portrait", "tvgenre")
+		else
+			response = parseItemsResponse(json, 0, "two-row-flat-landscape-custom")
+		end if
+		
+		buttons = GetBaseTVButtons(viewController, tvToggle)
+		
+		' Only insert buttons if startIndex = 0
+		if startIndex = 0 then						
+			buttons.Append(response.Items)		
+			response.Items = buttons
+		end if
+		
+		if response.TotalCount > maxListSize response.TotalCount = maxListSize	
+		response.TotalCount = response.TotalCount + buttons.Count()
+		return response
+		
+	else if id = "music" then
+	
+		response = parseItemsResponse(json, 0, "mixed-aspect-ratio-square")
+		
+		musicToggle  = (firstOf(RegUserRead("musicToggle"), "1")).ToInt()		
+		buttons = GetBaseMusicButtons(viewController, musicToggle)
+		
+		' Only insert buttons if startIndex = 0
+		if startIndex = 0 then
+			buttons.Append(response.Items)		
+			response.Items = buttons
+		end if
+		
+		if response.TotalCount > maxListSize response.TotalCount = maxListSize	
+		response.TotalCount = response.TotalCount + buttons.Count()
+		return response
+		
+	end if
+
+	return parseItemsResponse(json, 0, "two-row-flat-landscape-custom")
+	
 End Function
 
 Function isLiveTvEnabled() as Boolean
@@ -168,55 +320,46 @@ Function handleHomeScreenMessage(msg) as Boolean
 
 	if type(msg) = "roGridScreenEvent" Then
 
-        if msg.isListFocused() then
-
-        else if msg.isListItemSelected() Then
+        if msg.isListItemSelected() Then
 			
-			context = m.rowContent[msg.GetIndex()]
-            row = msg.GetIndex()
-            selection = msg.getData()
-			item = context[selection]
+			rowIndex = msg.GetIndex()
+			context = m.contentArray[rowIndex]           
+            index = msg.GetData()
+            item = context[index]
 
-			if item = invalid then
+            if item = invalid then
 
             Else If item.ContentType = "MovieToggle" Then
 
 				handled = true
-
                 GetNextMovieToggle()
-                moviesButtons = GetMovieButtons(viewController)
-                m.UpdateRowContent(row, moviesButtons)
+                m.loader.RefreshRow(rowIndex)
 
             Else If item.ContentType = "MovieRefreshSuggested" Then
 				
                 handled = true
-
-                moviesButtons = GetMovieButtons(viewController)
-                m.UpdateRowContent(row, moviesButtons)
+                m.loader.RefreshRow(rowIndex)
 
             Else If item.ContentType = "TVToggle" Then
 				
                 handled = true
 
                 GetNextTVToggle()
-                tvButtons = GetTVButtons(viewController)
-                m.UpdateRowContent(row, tvButtons)
+                m.loader.RefreshRow(rowIndex)
 
             Else If item.ContentType = "LiveTVToggle" Then
 				
                 handled = true
 
                 GetNextLiveTVToggle()
-                liveTvButtons = GetLiveTVButtons(viewController)
-                m.UpdateRowContent(row, liveTvButtons)
+                m.loader.RefreshRow(rowIndex)
 
             Else If item.ContentType = "MusicToggle" Then
 				
                 handled = true
 
                 GetNextMusicToggle()
-                musicButtons = GetMusicButtons(viewController)
-                m.UpdateRowContent(row, musicButtons)
+                m.loader.RefreshRow(rowIndex)
 
             End If
 				
@@ -224,12 +367,7 @@ Function handleHomeScreenMessage(msg) as Boolean
 			
     End If
 
-
-	if handled = false then
-		handled = m.baseHandleMessage(msg)
-	end If
-
-	return handled
+	return handled or m.baseHandleMessage(msg)
 
 End Function
 
@@ -239,13 +377,15 @@ End Function
 
 Function GetNextMovieToggle()
 
-    m.movieToggle = m.movieToggle + 1
+	movieToggle  = (firstOf(RegUserRead("movieToggle"), "2")).ToInt()
+	
+    movieToggle = movieToggle + 1
 
-    if m.movieToggle = 7 then
-        m.movieToggle = 1
+    if movieToggle = 7 then
+        movieToggle = 1
     end if
 
-    RegUserWrite("movieToggle", m.movieToggle)
+    RegUserWrite("movieToggle", movieToggle)
 	
 End Function
 
@@ -270,8 +410,10 @@ Function GetMovieButtons(viewController as Object) As Object
             ContentType: "MovieToggle"
         }
     ]
+	
+	movieToggle  = (firstOf(RegUserRead("movieToggle"), "2")).ToInt()
 
-    if m.movieToggle = 1 then
+    if movieToggle = 1 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-1.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-1.jpg")
@@ -296,7 +438,7 @@ Function GetMovieButtons(viewController as Object) As Object
             buttons.Append( suggestedMovies.Items )
         end if
 
-    else if m.movieToggle = 2 then
+    else if movieToggle = 2 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-2.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-2.jpg")
@@ -309,7 +451,7 @@ Function GetMovieButtons(viewController as Object) As Object
             buttons.Append( recentMovies.Items )
         end if
 
-    else if m.movieToggle = 3 then
+    else if movieToggle = 3 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-3.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-3.jpg")
@@ -321,7 +463,7 @@ Function GetMovieButtons(viewController as Object) As Object
             buttons.Append( alphaMovies.Items )
         end if
 
-    else if m.movieToggle = 4 then
+    else if movieToggle = 4 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-4.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-4.jpg")
@@ -333,7 +475,7 @@ Function GetMovieButtons(viewController as Object) As Object
             buttons.Append( resumeMovies.Items )
         end if
 
-    else if m.movieToggle = 5 then
+    else if movieToggle = 5 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-5.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-5.jpg")
@@ -345,7 +487,7 @@ Function GetMovieButtons(viewController as Object) As Object
             buttons.Append( favoriteMovies.Items )
         end if
 
-    else if m.movieToggle = 6 then
+    else if movieToggle = 6 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-6.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-6.jpg")
@@ -359,7 +501,10 @@ Function GetMovieButtons(viewController as Object) As Object
 
     end if
 
-    Return buttons
+    Return {
+		Items: buttons
+		TotalCount: buttons.Count()
+	}
 	
 End Function
 
@@ -369,13 +514,15 @@ End Function
 
 Function GetNextTVToggle()
 
-    m.tvToggle = m.tvToggle + 1
+	tvToggle     = (firstOf(RegUserRead("tvToggle"), "1")).ToInt()
+	
+    tvToggle = tvToggle + 1
 
-    if m.tvToggle = 7 then
-        m.tvToggle = 1
+    if tvToggle = 7 then
+        tvToggle = 1
     end if
 
-    RegUserWrite("tvToggle", m.tvToggle)
+    RegUserWrite("tvToggle", tvToggle)
 	
 End Function
 
@@ -383,7 +530,7 @@ End Function
 '** Get TV Buttons Row
 '**********************************************************
 
-Function GetTVButtons(viewController as Object) As Object
+Function GetBaseTVButtons(viewController as Object, tvToggle as Integer) As Object
 
     buttons = [
         {
@@ -395,87 +542,67 @@ Function GetTVButtons(viewController as Object) As Object
         }
     ]
 
-    switchButton = [
+	switchButton = [
         {
             ContentType: "TVToggle"
         }
     ]
 
-    if m.tvToggle = 1 then
+    if tvToggle = 1 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-1.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-1.jpg")
 
-        buttons.Append( switchButton )
-
-        nextUpTV = getTvNextUp(invalid, invalid, true)
-        if nextUpTV <> invalid
-            buttons.Append( nextUpTV.Items )
-        end if
-
-    else if m.tvToggle = 2 then
+    else if tvToggle = 2 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-2.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-2.jpg")
 
-        buttons.Append( switchButton )
-
-        recentTV = getTvLatest()
-        if recentTV <> invalid
-            buttons.Append( recentTV.Items )
-        end if
-
-    else if m.tvToggle = 3 then
+    else if tvToggle = 3 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-3.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-3.jpg")
 
-        buttons.Append( switchButton )
+    else if tvToggle = 4 then
+	
+        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-4.jpg")
+        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-4.jpg")
 
+    else if tvToggle = 5 then
+	
+        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-5.jpg")
+        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-5.jpg")
+
+    else if tvToggle = 6 then
+	
+        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-6.jpg")
+        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-6.jpg")
+
+    end if
+
+    buttons.Append( switchButton )
+	
+	return buttons
+	
+End Function
+
+Function GetTVButtons(viewController as Object, tvToggle as Integer) As Object
+
+    buttons = GetBaseTVButtons(viewController, tvToggle)
+
+    if tvToggle = 3 then
+	
         alphaTV = getAlphabetList("TvAlphabet")
         if alphaTV <> invalid
             buttons.Append( alphaTV.Items )
         end if
 
-    else if m.tvToggle = 4 then
-	
-        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-4.jpg")
-        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-4.jpg")
-
-        buttons.Append( switchButton )
-
-        resumeTV = getTvResumable()
-        if resumeTV <> invalid
-            buttons.Append( resumeTV.Items )
-        end if
-
-    else if m.tvToggle = 5 then
-	
-        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-5.jpg")
-        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-5.jpg")
-
-        buttons.Append( switchButton )
-
-        favoriteShows = getTvFavorites()
-        if favoriteShows <> invalid
-            buttons.Append( favoriteShows.Items )
-        end if
-
-    else if m.tvToggle = 6 then
-	
-        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-6.jpg")
-        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-6.jpg")
-
-        buttons.Append( switchButton )
-
-        genresTV = getTvGenres(invalid, invalid, true)
-        if genresTV <> invalid
-            buttons.Append( genresTV.Items )
-        end if
-
     end if
 
-    Return buttons
+    Return {
+		Items: buttons
+		TotalCount: buttons.Count()
+	}
 	
 End Function
 
@@ -485,13 +612,14 @@ End Function
 
 Function GetNextLiveTVToggle()
 
-    m.liveTvToggle = m.liveTvToggle + 1
+	liveTvToggle = (firstOf(RegUserRead("liveTvToggle"), "1")).ToInt()
+    liveTvToggle = liveTvToggle + 1
 
-    if m.liveTvToggle = 4 then
-        m.liveTvToggle = 1
+    if liveTvToggle = 4 then
+        liveTvToggle = 1
     end if
 
-    RegUserWrite("liveTvToggle", m.liveTvToggle)
+    RegUserWrite("liveTvToggle", liveTvToggle)
 	
 End Function
 
@@ -501,6 +629,13 @@ End Function
 
 Function GetLiveTVButtons(viewController as Object) As Object
 
+	if isLiveTvEnabled() <> true then
+		Return {
+			Items: []
+			TotalCount: 0
+		}
+	end if
+	
     buttons = [
         {
             Title: "Channels"
@@ -523,8 +658,10 @@ Function GetLiveTVButtons(viewController as Object) As Object
             ContentType: "LiveTVToggle"
         }
     ]
-
-    if m.liveTvToggle = 1 then
+	
+	liveTvToggle = (firstOf(RegUserRead("liveTvToggle"), "1")).ToInt()
+	
+    if liveTvToggle = 1 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-10.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-10.jpg")
@@ -537,14 +674,14 @@ Function GetLiveTVButtons(viewController as Object) As Object
             buttons.Append( whatsOnLiveTv.Items )
         end if
 
-    else if m.liveTvToggle = 2 then
+    else if liveTvToggle = 2 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-11.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-11.jpg")
 
         buttons.Append( switchButton )
 
-    else if m.liveTvToggle = 3 then
+    else if liveTvToggle = 3 then
 	
         switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-12.jpg")
         switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-12.jpg")
@@ -558,7 +695,10 @@ Function GetLiveTVButtons(viewController as Object) As Object
 
     end if
 
-    Return buttons
+    Return {
+		Items: buttons
+		TotalCount: buttons.Count()
+	}
 	
 End Function
 
@@ -568,14 +708,16 @@ End Function
 
 Function GetNextMusicToggle()
 
-    m.musicToggle = m.musicToggle + 1
+	musicToggle  = (firstOf(RegUserRead("musicToggle"), "1")).ToInt()
+	
+    musicToggle = musicToggle + 1
 
-    if m.musicToggle = 4 then
-        m.musicToggle = 1
+    if musicToggle = 4 then
+        musicToggle = 1
     end if
 
     ' Update Registry
-    RegUserWrite("musicToggle", m.musicToggle)
+    RegUserWrite("musicToggle", musicToggle)
 	
 End Function
 
@@ -583,7 +725,7 @@ End Function
 '** GetMusicButtons
 '**********************************************************
 
-Function GetMusicButtons(viewController as Object) As Object
+Function GetBaseMusicButtons(viewController as Object, musicToggle as Integer) As Object
 
     buttons = [
         {
@@ -595,69 +737,61 @@ Function GetMusicButtons(viewController as Object) As Object
         }
     ]
 
-    switchButton = [
-        {
+	switchButton = {
             ContentType: "MusicToggle"
         }
-    ]
 
     ' Latest
-    if m.musicToggle = 1 then
-        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-7.jpg")
-        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-7.jpg")
-
-        buttons.Append( switchButton )
-
-        latestMusic = getMusicLatest()
-        if latestMusic <> invalid
-            buttons.Append( latestMusic.Items )
-        end if
+    if musicToggle = 1 then
+	
+        switchButton.HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-7.jpg")
+        switchButton.SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-7.jpg")
 
     ' Jump In Album
-    else if m.musicToggle = 2 then
-        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-8.jpg")
-        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-8.jpg")
+    else if musicToggle = 2 then
+	
+        switchButton.HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-8.jpg")
+        switchButton.SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-8.jpg")
 
-        buttons.Append( switchButton )
+    ' Jump In Artist
+    else if musicToggle = 3 then
+        switchButton.HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-9.jpg")
+        switchButton.SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-9.jpg")
 
-        alphaMusicAlbum = getAlphabetList("MusicAlbumAlphabet")
+    end if
+
+    buttons.Push( switchButton )
+	
+	return buttons
+End Function
+
+Function GetMusicButtons(viewController as Object, musicToggle as Integer) As Object
+
+	buttons = GetBaseMusicButtons(viewController, musicToggle)
+
+    ' Jump In Album
+    if musicToggle = 2 then
+        
+		alphaMusicAlbum = getAlphabetList("MusicAlbumAlphabet")
         if alphaMusicAlbum <> invalid
             buttons.Append( alphaMusicAlbum.Items )
         end if
 
     ' Jump In Artist
-    else if m.musicToggle = 3 then
-        switchButton[0].HDPosterUrl = viewController.getThemeImageUrl("hd-toggle-9.jpg")
-        switchButton[0].SDPosterUrl = viewController.getThemeImageUrl("hd-toggle-9.jpg")
-
-        buttons.Append( switchButton )
-
-        alphaMusicArtist = getAlphabetList("MusicArtistAlphabet")
+    else if musicToggle = 3 then
+        
+		alphaMusicArtist = getAlphabetList("MusicArtistAlphabet")
         if alphaMusicArtist <> invalid
             buttons.Append( alphaMusicArtist.Items )
         end if
 
     end if
 
-    Return buttons
+    Return {
+		Items: buttons
+		TotalCount: buttons.Count()
+	}
 	
-End Function
-
-'**********************************************************
-'** GetChannelButtons
-'**********************************************************
-
-Function GetChannelButtons(viewController as Object) As Object
-
-    buttons = []
-
-    Channels = GetChannels()
-    if Channels <> invalid
-        buttons.Append( Channels.Items )
-    end if
-    
-    Return buttons
-    
 End Function
 
 '**********************************************************
@@ -691,24 +825,10 @@ Function GetOptionButtons(viewController as Object) As Object
         }
     ]
 
-    Return buttons
-	
-End Function
-
-'**********************************************************
-'** Get Media Folder Buttons Row
-'**********************************************************
-
-Function GetMediaFolderButtons() As Object
-
-    buttons = []
-
-    mediaFoldersList = getMediaFolders()
-    If mediaFoldersList <> invalid
-        buttons.Append( mediaFoldersList.Items )
-    End if
-
-    Return buttons
+    Return {
+		Items: buttons
+		TotalCount: buttons.Count()
+	}
 	
 End Function
 

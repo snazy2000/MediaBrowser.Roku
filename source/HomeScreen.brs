@@ -72,6 +72,7 @@ Function getHomeScreenLocalData(row as Integer, id as String, startItem as Integ
 	
 	if id = "options" then
 		return GetOptionButtons(viewController)
+		
 	else if id = "movies" 
 	
 		movieToggle  = (firstOf(RegUserRead("movieToggle"), "2")).ToInt()
@@ -313,7 +314,7 @@ End Function
 Function parseHomeScreenResult(row as Integer, id as string, startIndex as Integer, json as String) as Object
 
 	viewController = GetViewController()
-	maxListSize = 100
+	maxListSize = 60
 	
 	if id = "folders" then
 		return parseItemsResponse(json, 0, "two-row-flat-landscape-custom")
@@ -374,6 +375,13 @@ Function parseHomeScreenResult(row as Integer, id as string, startIndex as Integ
 		
 	else if id = "livetv" then
 	
+		if isLiveTvEnabled() <> true then
+			Return {
+				Items: []
+				TotalCount: 0
+			}
+		end if    
+	
 		liveTvToggle = (firstOf(RegUserRead("liveTvToggle"), "1")).ToInt()
 		
 		if liveTvToggle = 1 then
@@ -402,6 +410,13 @@ Function parseHomeScreenResult(row as Integer, id as string, startIndex as Integ
 	
 		response = parseItemsResponse(json, 0, "mixed-aspect-ratio-square")
 		
+		if response.TotalCount = 0 then
+			Return {
+				Items: []
+				TotalCount: 0
+			}
+		end if    
+	
 		musicToggle  = (firstOf(RegUserRead("musicToggle"), "1")).ToInt()		
 		buttons = GetBaseMusicButtons(viewController, musicToggle)
 		buttonCount = buttons.Count()
@@ -764,10 +779,6 @@ End Function
 
 Function GetBaseLiveTVButtons(viewController as Object, liveTvToggle as Integer) As Object
 
-	if isLiveTvEnabled() <> true then
-		Return []
-	end if    
-	
 	buttons = [
         {
             Title: "Channels"

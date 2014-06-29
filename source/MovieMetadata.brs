@@ -1,7 +1,3 @@
-'*****************************************************************
-'**  Media Browser Roku Client - Movie Metadata Class
-'*****************************************************************
-
 '**********************************************************
 '** parseSuggestedMoviesResponse
 '**********************************************************
@@ -12,17 +8,25 @@ Function parseSuggestedMoviesResponse(response) As Object
 
         contentList = CreateObject("roArray", 20, true)
         fixedResponse = normalizeJson(response)
-        jsonObj     = ParseJSON(fixedResponse)
+        result     = ParseJSON(fixedResponse)
 
-        if jsonObj = invalid
-            Debug("Error while parsing JSON response for Recently Added Movies")
+        if result = invalid
+            Debug("Error in parseSuggestedMoviesResponse")
             return invalid
         end if
 
         ' Only Grab 1 Category
-        jsonObj = jsonObj[0]
+        category = result[0]
+		
+		' Results are empty
+		if category = invalid then
+            return {
+				Items: contentList
+				TotalCount: contentList.Count()
+			}
+		end if
 
-        for each i in jsonObj.Items
+        for each i in category.Items
             metaData = getMetadataFromServerItem(i, 1, "mixed-aspect-ratio-portrait")
 
             contentList.push( metaData )
@@ -30,8 +34,8 @@ Function parseSuggestedMoviesResponse(response) As Object
 
         return {
             Items: contentList
-            RecommendationType: jsonObj.RecommendationType
-            BaselineItemName: jsonObj.BaselineItemName
+            RecommendationType: category.RecommendationType
+            BaselineItemName: category.BaselineItemName
 			TotalCount: contentList.Count()
         }
     end if

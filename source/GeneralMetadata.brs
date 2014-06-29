@@ -269,6 +269,8 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
     if i.CommunityRating <> invalid
         metaData.StarRating = Int(i.CommunityRating) * 10
     end if
+	
+	metaData.Director = getDirector(i, mode)
 
     ' Set the Play Access
     metaData.PlayAccess = firstOf(i.PlayAccess, "Full")
@@ -880,6 +882,23 @@ Function getDescription(i as Object, mode as String) as String
 
 End Function
 
+function getDirector(i as Object, mode as String) as String
+
+	if i.People <> invalid then
+		for each person in i.People
+			if person.Type = "Director" or person.Role = "Director" then
+				
+				return person.Name
+			end if
+		end for
+	end if
+	
+	directorValue = ""
+	
+	return directorValue
+
+End Function
+
 Sub SetAudioStreamProperties(item as Object)
 
     ' Get Extension
@@ -895,7 +914,10 @@ Sub SetAudioStreamProperties(item as Object)
 	
 	item.MediaSourceId = mediaSource.Id
 
-    ' Direct Playback mp3 and wma
+	' Get the version number for checkminimumversion
+	versionArr = getGlobalVar("rokuVersion")
+	
+    ' Direct Playback mp3 and wma(plus flac for firmware 5.3 and above)
     If (container = "mp3") 
         item.Url = GetServerBaseUrl() + "/Audio/" + itemId + "/stream.mp3?static=true"
         item.StreamFormat = "mp3"
@@ -907,12 +929,18 @@ Sub SetAudioStreamProperties(item as Object)
         item.StreamFormat = "wma"
 		item.playMethod = "DirectStream"
 		item.canSeek = true
-    Else
+		
+    Else If (container = "flac") And CheckMinimumVersion(versionArr, [5, 3])
+        item.Url = GetServerBaseUrl() + "/Audio/" + itemId + "/stream.flac?static=true"
+        item.StreamFormat = "flac"
+		item.playMethod = "DirectStream"
+		item.canSeek = true
+	Else
         ' Transcode Play
         item.Url = GetServerBaseUrl() + "/Audio/" + itemId + "/stream.mp3?audioBitrate=128000&deviceId=" + getGlobalVar("rokuUniqueId", "Unknown")
         item.StreamFormat = "mp3"
 		item.playMethod = "Transcode"
-		item.canSeek = false
+		item.canSeek = item.Length <> invalid
     End If
 
 End Sub
@@ -982,7 +1010,7 @@ Function convertItemPeopleToMetadata(people as Object) as Object
             metaData.SDPosterUrl = GetViewController().getThemeImageUrl("sd-poster.jpg")
 		end If
 
-		if i.Role <> invalid then
+		if i.Role <> invalid and i.Role <> "" then
 			metaData.ShortDescriptionLine2 = "as " + i.Role
 		else if i.Type <> invalid then
 			metaData.ShortDescriptionLine2 = i.Type

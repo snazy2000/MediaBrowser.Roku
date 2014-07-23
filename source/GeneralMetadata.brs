@@ -240,6 +240,8 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
 	metaData.StartDate = i.StartDate
 	metaData.EndDate = i.EndDate
 	metaData.TimerId = i.TimerId
+	metaData.SeriesTimerId = i.SeriesTimerId
+	metaData.ProgramId = i.ProgramId
 
 	line1 = getShortDescriptionLine1(i, mode)
 
@@ -346,15 +348,11 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
     end if
 
     ' Set Unplayed Count
-    UnplayedCount = 0
+    UnplayedCount = i.UserData.UnplayedItemCount
+	
+	if UnplayedCount = invalid then UnplayedCount = 0
 
 	isPlayed = i.UserData.Played
-
-    if i.RecursiveUnplayedItemCount <> invalid
-        if i.RecursiveUnplayedItemCount <> 0
-            UnplayedCount = i.RecursiveUnplayedItemCount
-        end if
-    end if
 
 	if UnplayedCount > 0 then
 		PlayedPercentage = 0
@@ -363,8 +361,12 @@ Function getMetadataFromServerItem(i as Object, imageType as Integer, primaryIma
 	' Don't show progress bars for these
 	if i.Type = "MusicAlbum" or i.Type = "MusicArtist" then
 		PlayedPercentage = 0
-		UnplayedCount = 0
 		isPlayed = false
+	end if
+	
+	' Only display for these types
+	if i.Type <> "Season" and i.Type <> "Series" and i.Type <> "BoxSet" then
+		UnplayedCount = 0
 	end if
 
 	' Primary Image

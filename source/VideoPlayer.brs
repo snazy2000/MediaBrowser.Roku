@@ -171,14 +171,13 @@ Function videoPlayerCreateVideoPlayer(item, playOptions)
     m.videoItem = videoItem
 
 	if m.IsTranscoded then
-		m.playMethod = "Transcode"
-		m.canSeek = false
-		'videoItem.PlayStart = playOptions.PlayStart
+		m.playMethod = "Transcode"	
 	else
 		m.playMethod = "DirectStream"
-		m.canSeek = true
-		videoItem.PlayStart = playOptions.PlayStart
 	end if
+	
+	m.canSeek = videoItem.StreamInfo.CanSeek
+	videoItem.PlayStart = playOptions.PlayStart
 
 	player.SetContent(videoItem)
 
@@ -538,7 +537,8 @@ Function videoPlayerConstructVideoItem(item, options) as Object
 	   end if
 
 	   resolution = ""
-	   if serverStreamInfo.VideoStream <> invalid and serverStreamInfo.VideoStream.Width <> invalid then resolution = tostr(serverStreamInfo.VideoStream.Width) + "p "
+	   ' Change the VideoStream.Width to Height, shows 1920p instead of 1080p and 1280p instead of 720p in Direct Play Info
+	   if serverStreamInfo.VideoStream <> invalid and serverStreamInfo.VideoStream.Height <> invalid then resolution = tostr(serverStreamInfo.VideoStream.Height) + "p "
 
         item.ReleaseDate = releaseDate + "   Direct Play (" + resolution + audioCh + " " + audioCodec + " " + tostr(item.StreamFormat) + ")"
 	else

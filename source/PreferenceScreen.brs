@@ -56,6 +56,7 @@ Function handlePreferencesScreenMessage(msg) as Boolean
 					GetPreferenceEnhancedImages,
 					GetPreferenceMediaIndicators,
 					GetPreferenceServerUpdates,
+                    GetPreferenceShowClock,
                     GetPreferenceTimeFormat
 				]
 
@@ -346,6 +347,16 @@ Function GetPreferenceList() as Object
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         },
         {
+            Title: "Show Clock: " + GetSelectedPreference(GetPreferenceShowClock(), RegRead("prefShowClock")),
+            ShortTitle: "Show Clock",
+            ID: "prefShowClock",
+            ContentType: "pref",
+            PrefType: "list",
+            ShortDescriptionLine1: "Show or hide clock on Home Screen.",
+            HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
+            SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
+        },
+        {
             Title: "Time Format: " + GetSelectedPreference(GetPreferenceTimeFormat(), RegRead("prefTimeFormat")),
             ShortTitle: "Time Format",
             ID: "prefTimeFormat",
@@ -355,6 +366,7 @@ Function GetPreferenceList() as Object
             HDBackgroundImageUrl: viewController.getThemeImageUrl("hd-preferences-lg.png"),
             SDBackgroundImageUrl: viewController.getThemeImageUrl("sd-preferences-lg.png")
         }
+
     ]
 
     return preferenceList
@@ -570,6 +582,23 @@ Function GetPreferenceServerUpdates() as Object
             Title: "Yes [default]",
             Id: "yes",
             IsDefault: true
+        }
+    ]
+
+    return prefOptions
+End Function
+
+Function GetPreferenceShowClock() as Object
+    prefOptions = [
+        {
+            Title: "Yes [default]",
+            Id: "yes", 
+            IsDefault: true
+        },
+        {
+            Title: "No",
+            Id: "no",
+            IsDefault: false
         }
     ]
 
